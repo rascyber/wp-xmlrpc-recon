@@ -1,3 +1,0 @@
-target,xmlrpc_url,endpoint_status,list_methods_status,method_count,multicall_enabled,pingback_enabled,auth_endpoint_exposed,notes
-"http://127.0.0.1:18080","","no","no","0","no","no","no","No XML-RPC response detected"
-"http://127.0.0.1:18081","","no","no","0","no","no","no","No XML-RPC response detected"
