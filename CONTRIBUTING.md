@@ -2,42 +2,39 @@
 
 ## Scope
 
-Contributions should preserve the project's purpose as a safe reconnaissance utility for authorized security assessments.
+Contributions should improve reconnaissance quality, reporting clarity, and operational stability for authorized WordPress security assessments.
 
-## Local Workflow
+## Principles
 
-1. Create a feature branch from `dev`.
-2. Keep changes small and reviewable.
-3. Validate Bash syntax before opening a pull request.
-4. Run the scanner against the local mock workflow targets or a lab instance you control.
+- Keep the framework modular and Bash-first.
+- Preserve Linux and macOS portability.
+- Prefer passive or low-impact techniques.
+- Do not add brute force, password spraying, or destructive testing logic.
+- Document behavior changes in the README or docs when user-facing behavior changes.
 
-## Standards
+## Development Flow
 
-- Prefer portable Bash compatible with Linux and macOS.
-- Keep dependencies limited to `bash`, `curl`, and `jq` unless there is a strong justification.
-- Avoid adding behavior that performs credential attacks or disruptive testing.
-- Update documentation when behavior changes.
-
-## Branching
-
-- `main` is reserved for stable release history.
-- `dev` is the default integration branch.
-- `scanner-engine` is intended for experimental scan logic and parser changes.
+1. Branch from `dev`.
+2. Keep changes focused and reviewable.
+3. Run `bash -n scanner/*.sh`.
+4. Run the orchestrator against `tests/test_targets.txt`.
+5. Update docs and examples if the output format changes.
 
 ## Pull Requests
 
 Include:
 
-- a concise problem statement
-- the approach taken
+- problem statement
+- approach
 - test notes
-- any output format changes
+- sample output impact
 
-## Reporting Issues
+## Branch Model
 
-When reporting bugs, include:
+- `main`: stable releases
+- `dev`: integration
+- `scanner-engine`: experimental work
 
-- operating system and Bash version
-- the command used
-- sanitized target examples
-- relevant error output
+## Ethics
+
+This project is for authorized security testing only. Pull requests that add automated credential attacks or abusive traffic patterns should not be merged.

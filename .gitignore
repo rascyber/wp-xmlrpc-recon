@@ -1,2 +1,6 @@
-reports/scan_*/
+reports/*
+!reports/.gitkeep
+wordlists/generated/*
+!wordlists/generated/.gitkeep
 reports/.DS_Store
+tests/__pycache__/

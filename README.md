@@ -1,162 +1,180 @@
-# wp-xmlrpc-recon
+# wp-attack-surface-scanner
 
-`wp-xmlrpc-recon` is a Bash-first reconnaissance scanner for identifying exposed WordPress XML-RPC endpoints during authorized security testing. It detects reachable `xmlrpc.php` endpoints, enumerates supported methods, checks for `system.multicall`, flags `pingback.ping`, probes `wp.getUsersBlogs`, and exports timestamped CSV and HTML reports.
+`wp-attack-surface-scanner` is a modular WordPress reconnaissance framework for authorized bug bounty and penetration testing workflows. It maps the public attack surface of WordPress deployments by chaining detection, plugin discovery, REST API analysis, XML-RPC testing, login surface checks, user enumeration, optional public-content wordlist generation with CeWL, and optional passive WPScan integration.
 
-## Project Overview
+## Overview
 
-The project is designed for fast triage during bug bounty and penetration testing engagements where XML-RPC exposure may expand the attack surface. The scanner favors safe defaults:
+The framework is Bash-first and organized as composable modules under `scanner/`. Each target gets its own report directory with raw artifacts and a rendered HTML/JSON/CSV summary.
 
-- rate-limited requests
-- read-only reconnaissance
-- portable Bash implementation for Linux and macOS
-- timestamped report directories for repeatable engagements
+Capabilities:
 
-## XML-RPC Security Background
+- WordPress detection using content paths, `wp-json`, generator tags, and login markers
+- Plugin enumeration from HTML, JavaScript references, `robots.txt`, and REST hints
+- REST API discovery for users, posts, and custom namespaces
+- XML-RPC attack-surface inspection including `system.listMethods`, `system.multicall`, and `pingback.ping`
+- Login surface checks for `wp-login.php` and `wp-admin/`
+- User enumeration from REST, author paths, sitemaps, and feeds
+- Optional target-specific public vocabulary capture with CeWL
+- Optional passive WPScan integration when `wpscan` is installed
+- Structured HTML, JSON, and CSV reports
 
-WordPress XML-RPC is a remote procedure call interface historically used for publishing, mobile apps, and integrations. It remains useful operationally, but it also introduces reconnaissance opportunities:
+## Safety
 
-- `system.listMethods` reveals callable XML-RPC methods
-- `system.multicall` can amplify authentication attempts if available
-- `pingback.ping` can enable reflected network activity
-- `wp.getUsersBlogs` indicates whether the authentication surface is exposed
+For authorized security testing only.
 
-The scanner focuses on identifying those conditions without attempting brute force or disruptive validation.
+This repository is intentionally recon-focused. It does not automate password attacks or brute force workflows. The CeWL helper captures public-site vocabulary only, and the WPScan integration stays passive so the framework is usable in day-to-day recon without crossing into high-risk behavior by default.
 
 ## Installation
 
-### Prerequisites
+Requirements:
 
 - Bash
 - `curl`
 - `jq`
+- Docker for cross-platform CeWL/WPScan fallback support
 
-### Clone
+Optional tools:
+
+- `cewl`
+- `wpscan`
+
+Clone and run:
 
 ```bash
-git clone https://github.com/rascyber/wp-xmlrpc-recon.git
-cd wp-xmlrpc-recon
-chmod +x scanner/xmlrpc_scanner.sh
+git clone https://github.com/rascyber/wp-attack-surface-scanner.git
+cd wp-attack-surface-scanner
+chmod +x scanner/*.sh
+chmod +x scripts/install_dependencies.sh
+```
+
+Recommended dependency bootstrap:
+
+```bash
+./scripts/install_dependencies.sh
+```
+
+What the installer does:
+
+- installs native WPScan where practical
+- pulls the official Docker fallback images for CeWL and WPScan
+- gives the scanner a working path on macOS and Linux even when native tooling is absent or broken
+
+Docker fallback requires the Docker daemon to be running, not just the `docker` CLI to be installed.
+
+Tool selection order at runtime:
+
+- CeWL: native binary, then Docker fallback, otherwise `unavailable`
+- WPScan: healthy native binary, then Docker fallback, otherwise `unavailable`
+
+If you only want the container fallbacks:
+
+```bash
+./scripts/install_dependencies.sh --docker
 ```
 
 ## Usage
 
-Basic usage:
+Main entrypoint:
 
 ```bash
-./scanner/xmlrpc_scanner.sh -i examples/targets.txt
+./scanner/wp_scan.sh -t examples/targets.txt --full
 ```
 
-Common options:
+Common examples:
 
 ```bash
-./scanner/xmlrpc_scanner.sh \
-  -i examples/targets.txt \
-  -o reports \
-  -d 1 \
-  -t 10
+./scanner/wp_scan.sh -t examples/targets.txt --full
+./scanner/wp_scan.sh -t tests/test_targets.txt --xmlrpc --rest --users
+./scanner/wp_scan.sh -t examples/targets.txt --plugins --login --cewl
 ```
 
-Arguments:
+Options:
 
-- `-i` path to the targets file
-- `-o` output root directory for timestamped reports
-- `-d` delay in seconds between HTTP requests
-- `-t` request timeout in seconds
-- `-u` custom user agent
-- `-h` show help
+- `-t`, `--targets` path to target list
+- `-o`, `--output` report root directory, default `./reports`
+- `--plugins` run plugin enumeration
+- `--xmlrpc` run XML-RPC analysis
+- `--rest` run REST API analysis
+- `--login` run login surface checks
+- `--users` run user enumeration
+- `--cewl` run public vocabulary capture if CeWL is installed
+- `--wpscan` run passive WPScan integration if installed
+- `--full` run the full recon pipeline
+- `-h`, `--help` show help
 
-Targets can be:
+`--full` includes the optional CeWL and WPScan stages. Those stages now use native tools when healthy and automatically fall back to Docker when available.
 
-- full URLs such as `https://example.com`
-- explicit XML-RPC paths such as `https://example.com/xmlrpc.php`
-- hostnames such as `example.com`
+## Output
 
-When a scheme is omitted, the scanner tries HTTPS first and then HTTP.
-
-## Example Scan
-
-```bash
-./scanner/xmlrpc_scanner.sh -i tests/test_targets.txt -o reports
-```
-
-Example output:
+The scanner writes one directory per target under `reports/`:
 
 ```text
-[2026-03-08 10:00:00] Loaded 2 target(s) from tests/test_targets.txt
-[2026-03-08 10:00:00] Scanning http://127.0.0.1:18080
-[2026-03-08 10:00:02] Scanning http://127.0.0.1:18081
-[2026-03-08 10:00:04] Scan complete
-[2026-03-08 10:00:04] CSV report: reports/scan_20260308_100000/xmlrpc_scan.csv
-[2026-03-08 10:00:04] HTML report: reports/scan_20260308_100000/xmlrpc_scan.html
+reports/
+  example_com/
+    plugins.txt
+    users.txt
+    xmlrpc_methods.xml
+    rest_endpoints.json
+    wordlist.txt
+    report.html
+    report.json
+    report.csv
 ```
 
-## Report Explanation
+Repository-level summaries are also produced:
 
-Each scan creates a timestamped directory under the chosen output root:
+- `reports/summary.csv`
+- `reports/summary.json`
+- `reports/index.html`
 
-- `xmlrpc_scan.csv`: tabular output for spreadsheets and tooling
-- `xmlrpc_scan.html`: quick human-readable report
-- `scan_summary.json`: compact metadata and counts
+## Modules
 
-Key columns:
+- `scanner/detect_wordpress.sh`
+- `scanner/plugin_enum.sh`
+- `scanner/rest_api_scan.sh`
+- `scanner/xmlrpc_scan.sh`
+- `scanner/login_scan.sh`
+- `scanner/user_enum.sh`
+- `scanner/cewl_wordlist.sh`
+- `scanner/report_generator.sh`
+- `scanner/wp_scan.sh`
 
-- `endpoint_status`: whether an XML-RPC response was observed
-- `list_methods_status`: whether `system.listMethods` returned a method list
-- `method_count`: number of enumerated methods
-- `multicall_enabled`: whether `system.multicall` appears exposed
-- `pingback_enabled`: whether `pingback.ping` appears exposed
-- `auth_endpoint_exposed`: whether `wp.getUsersBlogs` appears callable
+## Dependency Bootstrap
 
-See the sample report in [reports/sample_report.html](/Users/sternsleuth/Development/wp-xmlrpc-recon/reports/sample_report.html).
+- `scripts/install_dependencies.sh`
 
-## Ethical Usage Statement
-
-Use this tool only against systems you own or are explicitly authorized to assess. The scanner is intended for defensive security, bug bounty reconnaissance within program rules, and internal validation. Do not use it for credential attacks, denial of service, or unauthorized access.
-
-## Branch Strategy
-
-Recommended repository branches:
-
-- `main`: stable releases
-- `dev`: active development
-- `scanner-engine`: experimental scanning changes
-
-## Release Strategy
-
-Create a release tag after validation:
+Examples:
 
 ```bash
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-Typical bootstrap flow:
-
-```bash
-git init
-git add .
-git commit -m "initial xmlrpc scanner"
-git branch dev
-git branch scanner-engine
-git tag v1.0.0
+./scripts/install_dependencies.sh
+./scripts/install_dependencies.sh --docker
+./scripts/install_dependencies.sh --wpscan
+./scripts/install_dependencies.sh --cewl --docker
 ```
 
 ## CI/CD
 
-GitHub Actions validates the Bash script and runs an integration scan against local mock XML-RPC services defined in the workflow at [.github/workflows/ci.yml](/Users/sternsleuth/Development/wp-xmlrpc-recon/.github/workflows/ci.yml).
+GitHub Actions validates Bash syntax and runs the orchestrator against local mock WordPress targets. See `.github/workflows/ci.yml`.
 
-## Roadmap
+## Documentation
 
-- Docker packaging
-- Nuclei templates
-- Burp integration
-- WordPress fingerprinting module
-- JSON report mode
+- `docs/architecture.md`
+- `docs/methodology.md`
+- `docs/bug_bounty_usage.md`
 
-## Contributing
+## Branches
 
-Contribution guidelines live in [CONTRIBUTING.md](/Users/sternsleuth/Development/wp-xmlrpc-recon/CONTRIBUTING.md).
+- `main` stable releases
+- `dev` integration branch
+- `scanner-engine` experimental scanner changes
+
+## Release
+
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
 
 ## License
 
-Released under the MIT License. See [LICENSE](/Users/sternsleuth/Development/wp-xmlrpc-recon/LICENSE).
+MIT License. See `LICENSE`.

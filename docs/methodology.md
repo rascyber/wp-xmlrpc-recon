@@ -1,35 +1,67 @@
 # Methodology
 
-## What XML-RPC Is
+## WordPress Attack Surface
 
-XML-RPC is a remote procedure call protocol that uses XML-formatted requests over HTTP. In WordPress it historically supported remote publishing clients, mobile applications, trackbacks, and integration workflows. The endpoint is commonly exposed at `/xmlrpc.php`.
+WordPress deployments expose a mix of public content endpoints, administrative interfaces, and application-specific extensions. Reconnaissance focuses on identifying those exposed paths before any deeper validation is attempted.
 
-## Why `system.multicall` Matters
+## Detection Strategy
 
-`system.multicall` allows a client to package multiple XML-RPC calls into a single request. In legitimate use it reduces overhead. In security testing it matters because exposed multicall support can increase attack efficiency for credential-based operations if other controls are weak. That makes it a high-value reconnaissance signal even when no active exploitation is attempted.
+WordPress presence is inferred from multiple low-impact signals:
 
-## Pingback Reflection Risks
+- `wp-content` and `wp-includes` references
+- `wp-json` availability
+- generator tags
+- login page markers
 
-`pingback.ping` enables one site to notify another about linked content. Historically, exposed pingback behavior has been abused for reflected traffic and internal reachability testing. During recon, the question is not whether to trigger it broadly, but whether the capability appears present so it can be documented for remediation or bounty reporting.
+Using multiple signals reduces false positives from CDN behavior or custom theming.
 
-## Authentication Endpoints
+## Plugin Risk Signals
 
-WordPress XML-RPC includes authenticated methods such as `wp.getUsersBlogs`. Even when invalid credentials are used, a distinct method response can confirm that the authentication surface is reachable through XML-RPC. This tool only performs a benign exposure check with placeholder credentials and does not attempt brute force or account validation.
+Plugins frequently expand the public attack surface. Discovery matters because plugin-specific REST routes, JavaScript bundles, and content references can reveal:
 
-## Bug Bounty Methodology
+- third-party code exposure
+- administrative functionality exposed through custom endpoints
+- versioning clues
+- potential high-value manual follow-up targets
 
-Recommended workflow:
+## REST API Exposure
 
-1. Confirm that XML-RPC exposure is in scope for the target program.
-2. Collect candidate hosts from program assets, subdomain discovery, or owned inventories.
-3. Run the scanner with conservative rate limits.
-4. Review `system.listMethods`, `system.multicall`, `pingback.ping`, and `wp.getUsersBlogs` findings.
-5. Validate impact manually against the program rules before reporting.
-6. Report only authorized, reproducible findings with clear remediation guidance.
+The REST API is useful for both WordPress features and plugin extensions. Public user and post endpoints can reveal:
 
-## Safety Notes
+- usernames
+- content metadata
+- custom namespaces
+- plugin-defined routes
 
-- Keep scan rates low.
-- Avoid brute force logic.
-- Do not use against assets without permission.
-- Treat XML-RPC exposure as one signal within a broader WordPress attack surface review.
+The scanner records route and namespace exposure without attempting privileged operations.
+
+## XML-RPC Exposure
+
+XML-RPC remains relevant in older and mixed WordPress estates. Recon output records:
+
+- `xmlrpc.php` reachability
+- `system.listMethods`
+- `system.multicall`
+- `pingback.ping`
+- authentication RPC surface indicators
+
+These signals help prioritize follow-up without automating credential attacks.
+
+## Login Surface
+
+The framework checks `wp-login.php` and `wp-admin/` to determine:
+
+- whether the login endpoint is exposed
+- whether invalid submissions return recognizable responses
+- whether rate-limiting indicators appear in headers or body content
+
+## User Enumeration
+
+Usernames are collected passively from:
+
+- REST API responses
+- author archive links
+- user sitemaps
+- RSS feeds
+
+The goal is visibility into exposure, not account interaction.
