@@ -309,6 +309,17 @@ write_html_report() {
       color: var(--good);
       font-weight: 700;
     }
+    footer {
+      margin-top: 24px;
+      text-align: center;
+      color: var(--muted);
+      font-size: 0.95rem;
+    }
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 700;
+    }
   </style>
 </head>
 <body>
@@ -316,6 +327,7 @@ write_html_report() {
     <section class="meta">
       <h1>wp-xmlrpc-recon</h1>
       <p>Generated: $(html_escape "${generated_at}")</p>
+      <p>Created by: Sternly Simon</p>
       <p>This report summarizes XML-RPC reconnaissance results gathered in a rate-limited, read-only scan.</p>
     </section>
     <section class="summary">
@@ -362,6 +374,9 @@ EOF
     cat <<'EOF'
       </tbody>
     </table>
+    <footer>
+      <p>Powered by <a href="https://www.cyberdevelopment.company">Cyber Development</a></p>
+    </footer>
   </main>
 </body>
 </html>
