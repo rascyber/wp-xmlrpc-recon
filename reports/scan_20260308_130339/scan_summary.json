@@ -1,0 +1,14 @@
+{
+  "generated_at": "2026-03-08 13:03:39 SAST",
+  "reports": {
+    "csv": "reports/scan_20260308_130339/xmlrpc_scan.csv",
+    "html": "reports/scan_20260308_130339/xmlrpc_scan.html"
+  },
+  "totals": {
+    "total_targets": 2,
+    "exposed_endpoints": 0,
+    "multicall_enabled": 0,
+    "pingback_enabled": 0,
+    "auth_surface_exposed": 0
+  }
+}

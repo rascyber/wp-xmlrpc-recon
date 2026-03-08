@@ -1,0 +1,7 @@
+# Example target formats
+# example.com
+# https://example.org
+# https://example.net/xmlrpc.php
+
+http://127.0.0.1:18080
+http://127.0.0.1:18081

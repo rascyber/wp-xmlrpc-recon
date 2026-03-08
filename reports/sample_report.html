@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sample wp-xmlrpc-recon report</title>
+  <style>
+    body {
+      font-family: "IBM Plex Sans", "Avenir Next", sans-serif;
+      margin: 0;
+      background: linear-gradient(180deg, #efe2cf 0%, #f4efe6 100%);
+      color: #1d1d1b;
+    }
+    main {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 28px 20px 40px;
+    }
+    .card {
+      background: #fffaf2;
+      border: 1px solid #d6c6b0;
+      border-radius: 18px;
+      padding: 18px;
+      margin-bottom: 18px;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 12px;
+    }
+    .metric strong {
+      display: block;
+      font-size: 1.7rem;
+      color: #8e4b10;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fffaf2;
+      border: 1px solid #d6c6b0;
+      border-radius: 18px;
+      overflow: hidden;
+    }
+    th, td {
+      padding: 12px 10px;
+      border-bottom: 1px solid #d6c6b0;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      background: #f0e2cd;
+    }
+    tr:last-child td {
+      border-bottom: 0;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="card">
+      <h1>Sample Report</h1>
+      <p>Generated: 2026-03-08 10:00:00 UTC</p>
+      <p>This sample shows the layout produced by the scanner's HTML report output.</p>
+    </section>
+    <section class="card grid">
+      <div class="metric"><span>Total targets</span><strong>2</strong></div>
+      <div class="metric"><span>Exposed endpoints</span><strong>2</strong></div>
+      <div class="metric"><span>Multicall enabled</span><strong>1</strong></div>
+      <div class="metric"><span>Pingback enabled</span><strong>1</strong></div>
+      <div class="metric"><span>Auth surface exposed</span><strong>2</strong></div>
+    </section>
+    <table>
+      <thead>
+        <tr>
+          <th>Target</th>
+          <th>XML-RPC URL</th>
+          <th>Endpoint</th>
+          <th>Methods</th>
+          <th>Count</th>
+          <th>Multicall</th>
+          <th>Pingback</th>
+          <th>Auth</th>
+          <th>Notes</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>http://127.0.0.1:18080</td>
+          <td>http://127.0.0.1:18080/xmlrpc.php</td>
+          <td>yes</td>
+          <td>yes</td>
+          <td>4</td>
+          <td>yes</td>
+          <td>yes</td>
+          <td>yes</td>
+          <td>system.listMethods succeeded; sample methods: system.listMethods, system.multicall, pingback.ping, wp.getUsersBlogs</td>
+        </tr>
+        <tr>
+          <td>http://127.0.0.1:18081</td>
+          <td>http://127.0.0.1:18081/xmlrpc.php</td>
+          <td>yes</td>
+          <td>yes</td>
+          <td>2</td>
+          <td>no</td>
+          <td>no</td>
+          <td>yes</td>
+          <td>system.listMethods succeeded; sample methods: system.listMethods, wp.getUsersBlogs</td>
+        </tr>
+      </tbody>
+    </table>
+  </main>
+</body>
+</html>
