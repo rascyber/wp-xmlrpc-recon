@@ -20,14 +20,32 @@ TARGET_HOST="$(printf '%s' "${BASE_URL}" | sed 's#^[[:alpha:]][[:alnum:]+.-]*://
 ENGINE="none"
 CEWL_DOCKER_IMAGE="${CEWL_DOCKER_IMAGE:-ghcr.io/digininja/cewl:latest}"
 OUTPUT_DIR_ABS="$(abs_path "${OUTPUT_DIR}")"
+CEWL_BIN=""
+CONTAINER_BIN=""
+TIMEOUT_BIN=""
 
 : > "${TARGET_WORDLIST}"
 : > "${GLOBAL_WORDLIST}"
 
+if has_command timeout; then
+  TIMEOUT_BIN="timeout"
+elif has_command gtimeout; then
+  TIMEOUT_BIN="gtimeout"
+fi
+
 if [[ "${TARGET_HOST}" == "127.0.0.1" || "${TARGET_HOST}" == "localhost" ]]; then
   STATUS="skipped_loopback"
-elif has_command cewl && command_works cewl --help; then
-  if cewl "${BASE_URL}" -d 2 -m 5 -w "${TARGET_WORDLIST}" >/dev/null 2>&1; then
+elif CEWL_BIN="$(tool_path cewl 2>/dev/null)" && tool_works cewl --help; then
+  if [[ -n "${TIMEOUT_BIN}" ]]; then
+    if "${TIMEOUT_BIN}" 60 "${CEWL_BIN}" "${BASE_URL}" -d 2 -m 5 -w "${TARGET_WORDLIST}" >/dev/null 2>&1; then
+      cp "${TARGET_WORDLIST}" "${GLOBAL_WORDLIST}"
+      STATUS="generated"
+      ENGINE="native"
+      WORD_COUNT="$(wc -l < "${TARGET_WORDLIST}" | tr -d ' ')"
+    else
+      STATUS="error"
+    fi
+  elif "${CEWL_BIN}" "${BASE_URL}" -d 2 -m 5 -w "${TARGET_WORDLIST}" >/dev/null 2>&1; then
     cp "${TARGET_WORDLIST}" "${GLOBAL_WORDLIST}"
     STATUS="generated"
     ENGINE="native"
@@ -35,18 +53,18 @@ elif has_command cewl && command_works cewl --help; then
   else
     STATUS="error"
   fi
-elif docker_available; then
-  if docker run --rm \
+elif CONTAINER_BIN="$(container_runtime 2>/dev/null)"; then
+  if "${CONTAINER_BIN}" run --rm \
     -v "${OUTPUT_DIR_ABS}:/output" \
     "${CEWL_DOCKER_IMAGE}" \
     "${BASE_URL}" -d 2 -m 5 -w /output/wordlist.txt >/dev/null 2>&1; then
     cp "${TARGET_WORDLIST}" "${GLOBAL_WORDLIST}"
     STATUS="generated"
-    ENGINE="docker"
+    ENGINE="${CONTAINER_BIN}"
     WORD_COUNT="$(wc -l < "${TARGET_WORDLIST}" | tr -d ' ')"
   else
     STATUS="error"
-    ENGINE="docker"
+    ENGINE="${CONTAINER_BIN}"
   fi
 fi
 

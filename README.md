@@ -31,7 +31,7 @@ Requirements:
 - Bash
 - `curl`
 - `jq`
-- Docker for cross-platform CeWL/WPScan fallback support
+- Ruby plus Bundler for native CeWL/WPScan installs, or Docker/Podman for container fallback
 
 Optional tools:
 
@@ -55,16 +55,18 @@ Recommended dependency bootstrap:
 
 What the installer does:
 
-- installs native WPScan where practical
-- pulls the official Docker fallback images for CeWL and WPScan
-- gives the scanner a working path on macOS and Linux even when native tooling is absent or broken
+- installs repo-local CeWL and WPScan runtimes under `.tools/`
+- prefers Homebrew Ruby on macOS so WPScan is not tied to the system Ruby
+- clones the official CeWL project and bundles it locally
+- installs WPScan locally with a writable project-scoped cache/database home
+- pulls the official container fallback images for CeWL and WPScan when a runtime is available
 
-Docker fallback requires the Docker daemon to be running, not just the `docker` CLI to be installed.
+Container fallback requires a running Docker or Podman runtime, not just the CLI.
 
 Tool selection order at runtime:
 
-- CeWL: native binary, then Docker fallback, otherwise `unavailable`
-- WPScan: healthy native binary, then Docker fallback, otherwise `unavailable`
+- CeWL: repo-local wrapper, system binary, then Docker/Podman fallback, otherwise `unavailable`
+- WPScan: repo-local wrapper, healthy system binary, then Docker/Podman fallback, otherwise `unavailable`
 
 If you only want the container fallbacks:
 
@@ -102,7 +104,7 @@ Options:
 - `--full` run the full recon pipeline
 - `-h`, `--help` show help
 
-`--full` includes the optional CeWL and WPScan stages. Those stages now use native tools when healthy and automatically fall back to Docker when available.
+`--full` includes the optional CeWL and WPScan stages. Those stages now use repo-local or system-native tools when healthy and automatically fall back to Docker/Podman when available.
 
 ## Output
 

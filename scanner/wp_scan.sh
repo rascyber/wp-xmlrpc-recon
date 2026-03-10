@@ -45,6 +45,8 @@ run_passive_wpscan() {
   local engine="none"
   local output_dir_abs=""
   local wpscan_image="${WPSCAN_DOCKER_IMAGE:-wpscanteam/wpscan}"
+  local wpscan_bin=""
+  local container_bin=""
 
   if [[ "${RUN_WPSCAN}" != "yes" ]]; then
     jq -n --arg status "${status}" --arg engine "${engine}" '{status: $status, engine: $engine}' > "${output_dir}/wpscan.json"
@@ -59,7 +61,7 @@ run_passive_wpscan() {
 
   output_dir_abs="$(abs_path "${output_dir}")"
 
-  if has_command wpscan && command_works wpscan --version; then
+  if wpscan_bin="$(tool_path wpscan 2>/dev/null)" && tool_works wpscan --version; then
     if has_command timeout; then
       timeout_bin="timeout"
     elif has_command gtimeout; then
@@ -67,22 +69,22 @@ run_passive_wpscan() {
     fi
 
     if [[ -n "${timeout_bin}" ]]; then
-      if "${timeout_bin}" 60 wpscan --url "${base_url}" --plugins-detection passive --request-timeout 10 --format json -o "${output_dir}/wpscan.json" >/dev/null 2>&1; then
+      if "${timeout_bin}" 60 "${wpscan_bin}" --url "${base_url}" --plugins-detection passive --request-timeout 10 --format json -o "${output_dir}/wpscan.json" >/dev/null 2>&1; then
         status="completed"
         engine="native"
       else
         status="error"
         engine="native"
       fi
-    elif wpscan --url "${base_url}" --plugins-detection passive --request-timeout 10 --format json -o "${output_dir}/wpscan.json" >/dev/null 2>&1; then
+    elif "${wpscan_bin}" --url "${base_url}" --plugins-detection passive --request-timeout 10 --format json -o "${output_dir}/wpscan.json" >/dev/null 2>&1; then
       status="completed"
       engine="native"
     else
       status="error"
       engine="native"
     fi
-  elif docker_available; then
-    if docker run --rm \
+  elif container_bin="$(container_runtime 2>/dev/null)"; then
+    if "${container_bin}" run --rm \
       -v "${output_dir_abs}:/output" \
       "${wpscan_image}" \
       --url "${base_url}" \
@@ -91,10 +93,10 @@ run_passive_wpscan() {
       --format json \
       -o /output/wpscan.json >/dev/null 2>&1; then
       status="completed"
-      engine="docker"
+      engine="${container_bin}"
     else
       status="error"
-      engine="docker"
+      engine="${container_bin}"
     fi
   else
     status="unavailable"

@@ -3,6 +3,8 @@
 REQUEST_TIMEOUT="${REQUEST_TIMEOUT:-10}"
 REQUEST_DELAY="${REQUEST_DELAY:-0}"
 USER_AGENT="${USER_AGENT:-wp-attack-surface-scanner/2.0}"
+COMMON_SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMMON_PROJECT_ROOT="$(cd "${COMMON_SCRIPT_DIR}/.." && pwd)"
 
 log() {
   printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*"
@@ -20,14 +22,61 @@ has_command() {
   command -v "$1" >/dev/null 2>&1
 }
 
+tool_path() {
+  local tool_name="$1"
+  local candidate=""
+
+  for candidate in \
+    "${COMMON_PROJECT_ROOT}/tools/bin/${tool_name}" \
+    "${COMMON_PROJECT_ROOT}/.tools/bin/${tool_name}"; do
+    if [[ -x "${candidate}" ]]; then
+      printf '%s\n' "${candidate}"
+      return 0
+    fi
+  done
+
+  if command -v "${tool_name}" >/dev/null 2>&1; then
+    command -v "${tool_name}"
+    return 0
+  fi
+
+  return 1
+}
+
 command_works() {
   local command_name="$1"
   shift || true
   "${command_name}" "$@" >/dev/null 2>&1
 }
 
+tool_works() {
+  local tool_name="$1"
+  local tool_bin=""
+  shift || true
+
+  if ! tool_bin="$(tool_path "${tool_name}")"; then
+    return 1
+  fi
+
+  "${tool_bin}" "$@" >/dev/null 2>&1
+}
+
+container_runtime() {
+  if has_command docker && command_works docker info; then
+    printf 'docker\n'
+    return 0
+  fi
+
+  if has_command podman && command_works podman info; then
+    printf 'podman\n'
+    return 0
+  fi
+
+  return 1
+}
+
 docker_available() {
-  has_command docker && command_works docker info
+  container_runtime >/dev/null 2>&1
 }
 
 trim_line() {

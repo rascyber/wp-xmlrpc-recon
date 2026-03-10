@@ -4,3 +4,4 @@ wordlists/generated/*
 !wordlists/generated/.gitkeep
 reports/.DS_Store
 tests/__pycache__/
+.tools/
