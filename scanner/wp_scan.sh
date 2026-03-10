@@ -112,25 +112,36 @@ build_repository_summary() {
   local summary_csv="${OUTPUT_ROOT}/summary.csv"
   local summary_json="${OUTPUT_ROOT}/summary.json"
   local summary_html="${OUTPUT_ROOT}/index.html"
-  local first_row="yes"
   local report_file=""
+  local report_dir=""
+  local temp_dir=""
+  local temp_json=""
   local -a report_files
 
-  : > "${summary_csv}"
+  temp_dir="$(mktemp -d)"
+  printf 'target,base_url,wordpress_detected,plugin_count,user_count,xmlrpc_detected,xmlrpc_method_count,multicall,pingback,login_page_present,rate_limiting_signals,wordlist_status,wpscan_status\n' > "${summary_csv}"
   report_files=("${OUTPUT_ROOT}"/*/report.json)
 
   for report_file in "${report_files[@]}"; do
     [[ ! -f "${report_file}" ]] && continue
-    if [[ "${first_row}" == "yes" ]]; then
-      sed -n '1,2p' "${report_file%report.json}report.csv" > "${summary_csv}"
-      first_row="no"
-    else
-      sed -n '2p' "${report_file%report.json}report.csv" >> "${summary_csv}"
-    fi
+    sed -n '2p' "${report_file%report.json}report.csv" >> "${summary_csv}"
+    report_dir="$(basename "$(dirname "${report_file}")")"
+    temp_json="${temp_dir}/${report_dir}.json"
+    jq \
+      --arg report_dir "${report_dir}" \
+      '. + {
+        artifact_paths: {
+          directory: $report_dir,
+          report_html: ($report_dir + "/report.html"),
+          report_json: ($report_dir + "/report.json"),
+          report_csv: ($report_dir + "/report.csv"),
+          xmlrpc_methods_xml: ($report_dir + "/xmlrpc_methods.xml")
+        }
+      }' "${report_file}" > "${temp_json}"
   done
 
-  if [[ -f "${report_files[0]:-}" ]]; then
-    jq -s '.' "${report_files[@]}" > "${summary_json}"
+  if compgen -G "${temp_dir}/*.json" >/dev/null; then
+    jq -s '.' "${temp_dir}"/*.json > "${summary_json}"
   else
     printf '[]\n' > "${summary_json}"
   fi
@@ -146,12 +157,15 @@ build_repository_summary() {
   <style>
     :root {
       --bg: #f3ede2;
-      --panel: rgba(255, 251, 244, 0.92);
+      --panel: rgba(255, 251, 244, 0.94);
       --ink: #1d1d1b;
       --muted: #5b584f;
       --accent: #8e4b10;
       --border: #d6c6b0;
       --good: #1d6a4f;
+      --warn: #8a5a00;
+      --bad: #8b1e1e;
+      --info: #315f8f;
       --shadow: 0 16px 40px rgba(66, 47, 22, 0.08);
     }
     * { box-sizing: border-box; }
@@ -163,7 +177,7 @@ build_repository_summary() {
         linear-gradient(180deg, #efe2cf 0%, var(--bg) 100%);
       color: var(--ink);
     }
-    main { max-width: 1240px; margin: 0 auto; padding: 32px 20px 48px; }
+    main { max-width: 1400px; margin: 0 auto; padding: 32px 20px 48px; }
     .card {
       background: var(--panel);
       border: 1px solid var(--border);
@@ -194,34 +208,254 @@ build_repository_summary() {
       background: linear-gradient(135deg, rgba(142, 75, 16, 0.14), rgba(255, 247, 238, 0.8));
       border: 1px solid rgba(142, 75, 16, 0.14);
     }
-    .table-wrap {
-      overflow-x: auto;
-      border-radius: 18px;
-      border: 1px solid rgba(214, 198, 176, 0.9);
-      background: rgba(255, 255, 255, 0.5);
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
     }
-    table { width: 100%; border-collapse: collapse; min-width: 920px; }
-    th, td {
+    .metric {
+      padding: 16px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.56);
+      border: 1px solid rgba(214, 198, 176, 0.9);
+    }
+    .metric strong {
+      display: block;
+      font-size: 2rem;
+      line-height: 1;
+      margin-bottom: 10px;
+    }
+    .metric span {
+      color: var(--muted);
+      font-size: 0.92rem;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      margin-bottom: 18px;
+    }
+    .toolbar input {
+      flex: 1 1 280px;
+      min-width: 0;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 12px 16px;
+      background: rgba(255, 255, 255, 0.8);
+      color: var(--ink);
+      font: inherit;
+    }
+    .toolbar button {
+      border: 0;
+      border-radius: 999px;
       padding: 12px 10px;
-      border-bottom: 1px solid #d6c6b0;
+      background: var(--accent);
+      color: #fffaf4;
+      font: inherit;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .dashboard {
+      display: grid;
+      grid-template-columns: minmax(320px, 410px) minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+    }
+    .target-list {
+      display: grid;
+      gap: 12px;
+      max-height: 980px;
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .target-item {
+      width: 100%;
       text-align: left;
-      vertical-align: top;
+      border: 1px solid rgba(214, 198, 176, 0.9);
+      background: rgba(255, 255, 255, 0.6);
+      border-radius: 18px;
+      padding: 16px;
+      cursor: pointer;
+      transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease;
+    }
+    .target-item:hover,
+    .target-item.active {
+      transform: translateY(-1px);
+      border-color: rgba(142, 75, 16, 0.4);
+      box-shadow: 0 12px 24px rgba(66, 47, 22, 0.08);
+    }
+    .target-item h3 {
+      margin: 0 0 8px;
+      font-size: 1rem;
+      line-height: 1.3;
       overflow-wrap: anywhere;
     }
-    th {
-      background: rgba(142, 75, 16, 0.08);
+    .target-item p {
+      margin: 0 0 10px;
       color: var(--muted);
-      font-size: 0.86rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+      font-size: 0.92rem;
+      overflow-wrap: anywhere;
     }
-    tr:last-child td { border-bottom: 0; }
-    .good { color: var(--good); font-weight: 700; }
-    .muted { color: var(--muted); }
+    .mini-stats,
+    .badge-row,
+    .detail-links,
+    .mitre-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .mini-stat,
+    .token {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      max-width: 100%;
+      padding: 7px 10px;
+      border-radius: 12px;
+      background: rgba(142, 75, 16, 0.08);
+      color: var(--ink);
+      font-size: 0.85rem;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 6px 11px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+      border: 1px solid transparent;
+      text-transform: uppercase;
+    }
+    .badge-yes,
+    .badge-completed,
+    .badge-generated,
+    .badge-medium {
+      background: rgba(29, 106, 79, 0.12);
+      color: var(--good);
+      border-color: rgba(29, 106, 79, 0.22);
+    }
+    .badge-no,
+    .badge-skipped,
+    .badge-skipped_loopback,
+    .badge-not_requested,
+    .badge-unavailable,
+    .badge-info {
+      background: rgba(91, 88, 79, 0.1);
+      color: var(--muted);
+      border-color: rgba(91, 88, 79, 0.14);
+    }
+    .badge-error,
+    .badge-high {
+      background: rgba(139, 30, 30, 0.1);
+      color: var(--bad);
+      border-color: rgba(139, 30, 30, 0.18);
+    }
+    .badge-warn {
+      background: rgba(138, 90, 0, 0.12);
+      color: var(--warn);
+      border-color: rgba(138, 90, 0, 0.2);
+    }
+    .detail-panel {
+      min-height: 980px;
+    }
+    .detail-head {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .detail-head h2 {
+      margin: 0 0 8px;
+      font-size: 2rem;
+      line-height: 1.05;
+      overflow-wrap: anywhere;
+    }
+    .detail-head p {
+      margin: 4px 0;
+      color: var(--muted);
+      overflow-wrap: anywhere;
+    }
+    .detail-links a,
+    .mitre-row a {
+      color: var(--info);
+      text-decoration: none;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    .detail-grid,
+    .finding-grid,
+    .surface-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 14px;
+      margin-top: 14px;
+    }
+    .detail-card,
+    .surface-card,
+    .finding-card {
+      border: 1px solid rgba(214, 198, 176, 0.9);
+      border-radius: 18px;
+      padding: 16px;
+      background: rgba(255, 255, 255, 0.56);
+    }
+    .detail-card h3,
+    .surface-card h3,
+    .finding-card h3 {
+      margin: 0 0 10px;
+      font-size: 1rem;
+    }
+    .detail-card p,
+    .surface-card p,
+    .finding-card p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      line-height: 1.5;
+    }
+    .token-wrap {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      max-height: 240px;
+      overflow: auto;
+    }
+    .empty-state {
+      color: var(--muted);
+      padding: 24px 0;
+    }
+    .module-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      table-layout: fixed;
+    }
+    .module-table th,
+    .module-table td {
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      vertical-align: top;
+      padding: 10px 8px;
+      overflow-wrap: anywhere;
+    }
+    .module-table th {
+      color: var(--muted);
+      width: 32%;
+    }
     footer { margin-top: 24px; text-align: center; color: #5b584f; }
     footer a { color: #8e4b10; text-decoration: none; font-weight: 700; }
     @media (max-width: 840px) {
       .hero { grid-template-columns: 1fr; }
+      .dashboard { grid-template-columns: 1fr; }
+      .detail-panel { min-height: 0; }
+      .target-list,
+      .token-wrap { max-height: none; }
     }
   </style>
 </head>
@@ -237,44 +471,286 @@ build_repository_summary() {
       </article>
       <aside class="card hero-note">
         <p class="eyebrow">Review Guidance</p>
-        <p>Use this view to prioritize targets with confirmed WordPress exposure, rich user enumeration, or XML-RPC functionality before drilling into each target-specific report.</p>
+        <p>Use the target list to pivot between findings. Each detail view exposes plugins, users, author POE, login paths, REST routes, XML-RPC methods, and ATT&amp;CK-informed recon tags.</p>
       </aside>
     </section>
     <section class="card">
-      <p class="eyebrow">Targets</p>
-      <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>Target</th>
-            <th>Base URL</th>
-            <th>WordPress</th>
-            <th>Plugins</th>
-            <th>Users</th>
-            <th>XML-RPC</th>
-            <th>Multicall</th>
-            <th>Login</th>
-          </tr>
-        </thead>
-        <tbody>
-EOF
-    for report_file in "${report_files[@]}"; do
-      [[ ! -f "${report_file}" ]] && continue
-      printf '          <tr>\n'
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.target' "${report_file}")")"
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.base_url' "${report_file}")")"
-      printf '            <td class="%s">%s</td>\n' "$( [[ "$(jq -r '.wordpress_detected' "${report_file}")" == "yes" ]] && printf 'good' || printf 'muted' )" "$(html_escape "$(jq -r '.wordpress_detected' "${report_file}")")"
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.plugins | length' "${report_file}")")"
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.users | length' "${report_file}")")"
-      printf '            <td class="%s">%s</td>\n' "$( [[ "$(jq -r '.xmlrpc.xmlrpc_detected' "${report_file}")" == "yes" ]] && printf 'good' || printf 'muted' )" "$(html_escape "$(jq -r '.xmlrpc.xmlrpc_detected' "${report_file}")")"
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.xmlrpc.multicall' "${report_file}")")"
-      printf '            <td>%s</td>\n' "$(html_escape "$(jq -r '.login.login_page_present' "${report_file}")")"
-      printf '          </tr>\n'
-    done
-    cat <<'EOF'
-        </tbody>
-      </table>
+      <div id="app">
+        <div class="metric-grid" id="metrics"></div>
+        <div class="toolbar">
+          <input id="targetFilter" type="search" placeholder="Filter targets, plugins, users, endpoints, or ATT&CK IDs">
+          <button type="button" id="clearFilter">Clear Filter</button>
+        </div>
+        <div class="dashboard">
+          <section class="target-list" id="targetList" aria-label="Targets"></section>
+          <section class="detail-panel card" id="detailPanel">
+            <p class="empty-state">Select a target to view findings.</p>
+          </section>
+        </div>
       </div>
+      <script id="report-data" type="application/json">
+EOF
+    cat "${summary_json}"
+    cat <<'EOF'
+      </script>
+      <script>
+        const reports = JSON.parse(document.getElementById("report-data").textContent);
+        const metricsEl = document.getElementById("metrics");
+        const listEl = document.getElementById("targetList");
+        const detailEl = document.getElementById("detailPanel");
+        const filterEl = document.getElementById("targetFilter");
+        const clearEl = document.getElementById("clearFilter");
+        let activeIndex = 0;
+        let filteredReports = reports.slice();
+
+        function escapeHtml(value) {
+          return String(value ?? "")
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#39;");
+        }
+
+        function badgeClass(value) {
+          const normalized = String(value ?? "unknown").toLowerCase().replace(/[^a-z0-9_]+/g, "_");
+          return `badge-${normalized}`;
+        }
+
+        function renderBadge(value) {
+          return `<span class="badge ${badgeClass(value)}">${escapeHtml(value)}</span>`;
+        }
+
+        function renderTokens(values, emptyMessage) {
+          if (!values || values.length === 0) {
+            return `<div class="token-wrap"><span class="token">${escapeHtml(emptyMessage)}</span></div>`;
+          }
+          return `<div class="token-wrap">${values.map((value) => `<span class="token">${escapeHtml(value)}</span>`).join("")}</div>`;
+        }
+
+        function metricCard(label, value) {
+          return `<div class="metric"><strong>${escapeHtml(value)}</strong><span>${escapeHtml(label)}</span></div>`;
+        }
+
+        function attackSurfaceMarkup(items) {
+          if (!items || items.length === 0) {
+            return `<p class="empty-state">No attack-surface findings were generated for this target.</p>`;
+          }
+          return `<div class="surface-grid">${items.map((item) => `
+            <article class="surface-card">
+              <div class="badge-row">
+                ${renderBadge(item.priority || "info")}
+                ${(item.mitre || []).map((entry) => `<a href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">${escapeHtml(entry.id)}</a>`).join("")}
+              </div>
+              <h3>${escapeHtml(item.area)}</h3>
+              <p>${escapeHtml(item.summary)}</p>
+              ${renderTokens(item.evidence || [], "No evidence captured")}
+              <div class="mitre-row">
+                ${(item.mitre || []).map((entry) => `<a href="${escapeHtml(entry.url)}" target="_blank" rel="noreferrer">${escapeHtml(entry.id)} ${escapeHtml(entry.name)}</a>`).join("")}
+              </div>
+            </article>
+          `).join("")}</div>`;
+        }
+
+        function collectionCard(title, values, emptyMessage) {
+          return `
+            <article class="finding-card">
+              <h3>${escapeHtml(title)}</h3>
+              <p>${escapeHtml(String(values ? values.length : 0))} captured item(s)</p>
+              ${renderTokens(values || [], emptyMessage)}
+            </article>
+          `;
+        }
+
+        function updateMetrics(items) {
+          const totals = items.reduce((acc, report) => {
+            acc.targets += 1;
+            if (report.wordpress_detected === "yes") acc.wordpress += 1;
+            if (report.xmlrpc && report.xmlrpc.xmlrpc_detected === "yes") acc.xmlrpc += 1;
+            if (report.rest && report.rest.users_exposed === "yes") acc.restUsers += 1;
+            acc.plugins += (report.plugins || []).length;
+            acc.users += (report.users || []).length;
+            return acc;
+          }, {targets: 0, wordpress: 0, xmlrpc: 0, restUsers: 0, plugins: 0, users: 0});
+
+          metricsEl.innerHTML = [
+            metricCard("Targets in view", totals.targets),
+            metricCard("WordPress detected", totals.wordpress),
+            metricCard("XML-RPC exposed", totals.xmlrpc),
+            metricCard("REST users exposed", totals.restUsers),
+            metricCard("Plugins identified", totals.plugins),
+            metricCard("Users discovered", totals.users)
+          ].join("");
+        }
+
+        function renderList() {
+          if (filteredReports.length === 0) {
+            listEl.innerHTML = `<p class="empty-state">No targets match the current filter.</p>`;
+            detailEl.innerHTML = `<p class="empty-state">No target selected.</p>`;
+            return;
+          }
+
+          if (activeIndex >= filteredReports.length) {
+            activeIndex = 0;
+          }
+
+          listEl.innerHTML = filteredReports.map((report, index) => `
+            <button class="target-item ${index === activeIndex ? "active" : ""}" type="button" data-index="${index}">
+              <h3>${escapeHtml(report.target)}</h3>
+              <p>${escapeHtml(report.base_url)}</p>
+              <div class="mini-stats">
+                <span class="mini-stat">plugins ${escapeHtml((report.plugins || []).length)}</span>
+                <span class="mini-stat">users ${escapeHtml((report.users || []).length)}</span>
+                <span class="mini-stat">xmlrpc ${escapeHtml(report.xmlrpc?.method_count ?? 0)}</span>
+              </div>
+              <div class="badge-row">
+                ${renderBadge(report.wordpress_detected)}
+                ${renderBadge(report.xmlrpc?.xmlrpc_detected || "no")}
+                ${renderBadge(report.login?.login_page_present || "no")}
+              </div>
+            </button>
+          `).join("");
+
+          listEl.querySelectorAll(".target-item").forEach((button) => {
+            button.addEventListener("click", () => {
+              activeIndex = Number(button.dataset.index || 0);
+              renderList();
+              renderDetail(filteredReports[activeIndex]);
+            });
+          });
+
+          renderDetail(filteredReports[activeIndex]);
+        }
+
+        function renderDetail(report) {
+          const authorEvidence = report.user_enumeration?.evidence?.author_archives || [];
+          const userVectors = report.user_enumeration?.vectors || [];
+          const loginPaths = report.login?.login_paths || [];
+          const restEndpoints = report.rest?.custom_endpoints || [];
+          const xmlrpcMethods = report.xmlrpc?.methods || [];
+          const detailRows = [
+            ["WordPress signals", (report.detection?.signals || []).join(", ") || "None"],
+            ["Plugin sources", (report.plugin_discovery?.sources || []).join(", ") || "None"],
+            ["User vectors", userVectors.join(", ") || "None"],
+            ["REST namespaces", (report.rest?.namespaces || []).join(", ") || "None"],
+            ["Login paths", loginPaths.join(", ") || "None"],
+            ["XML-RPC URL", report.xmlrpc?.xmlrpc_url || "None"],
+            ["Wordlist status", report.wordlist?.status || "not_requested"],
+            ["WPScan status", report.wpscan?.status || "not_requested"]
+          ];
+
+          detailEl.innerHTML = `
+            <div class="detail-head">
+              <div>
+                <p class="eyebrow">Target Findings</p>
+                <h2>${escapeHtml(report.target)}</h2>
+                <p>${escapeHtml(report.base_url)}</p>
+                <div class="badge-row">
+                  ${renderBadge(report.wordpress_detected)}
+                  ${renderBadge(report.xmlrpc?.xmlrpc_detected || "no")}
+                  ${renderBadge(report.login?.login_page_present || "no")}
+                  ${renderBadge(report.wordlist?.status || "not_requested")}
+                  ${renderBadge(report.wpscan?.status || "not_requested")}
+                </div>
+              </div>
+              <div class="detail-links">
+                <a href="${escapeHtml(report.artifact_paths?.report_html || "#")}">Open full report</a>
+                <a href="${escapeHtml(report.artifact_paths?.report_json || "#")}">Open JSON</a>
+                <a href="${escapeHtml(report.artifact_paths?.report_csv || "#")}">Open CSV</a>
+              </div>
+            </div>
+            <div class="detail-grid">
+              <article class="detail-card">
+                <h3>High-Level Counts</h3>
+                <div class="mini-stats">
+                  <span class="mini-stat">plugins ${escapeHtml((report.plugins || []).length)}</span>
+                  <span class="mini-stat">users ${escapeHtml((report.users || []).length)}</span>
+                  <span class="mini-stat">xmlrpc methods ${escapeHtml(report.xmlrpc?.method_count ?? 0)}</span>
+                  <span class="mini-stat">rest endpoints ${escapeHtml(restEndpoints.length)}</span>
+                </div>
+              </article>
+              <article class="detail-card">
+                <h3>Authentication Surface</h3>
+                <div class="badge-row">
+                  ${renderBadge(report.login?.login_page_present || "no")}
+                  ${renderBadge(report.login?.invalid_login_response || "no")}
+                  ${renderBadge(report.login?.rate_limiting_signals || "no")}
+                </div>
+                ${renderTokens(loginPaths, "No login paths captured")}
+              </article>
+              <article class="detail-card">
+                <h3>User POE</h3>
+                <p>Evidence of public user discovery via REST, authors, sitemap, or feed output.</p>
+                ${renderTokens([
+                  ...(report.user_enumeration?.evidence?.rest_users || []).map((item) => `rest-user:${item}`),
+                  ...authorEvidence.map((item) => `author:${item}`),
+                  ...(report.user_enumeration?.evidence?.sitemap_authors || []).map((item) => `sitemap-author:${item}`),
+                  ...(report.user_enumeration?.evidence?.feed_authors || []).map((item) => `feed-creator:${item}`)
+                ], "No user evidence captured")}
+              </article>
+            </div>
+            <section>
+              <p class="eyebrow">ATT&CK-Informed Exposure Map</p>
+              ${attackSurfaceMarkup(report.attack_surface)}
+            </section>
+            <section>
+              <p class="eyebrow">Detailed Findings</p>
+              <div class="finding-grid">
+                ${collectionCard("Plugins", report.plugins || [], "No plugin identifiers captured")}
+                ${collectionCard("Users", report.users || [], "No users captured")}
+                ${collectionCard("User Enumeration Vectors", userVectors, "No user enumeration vectors captured")}
+                ${collectionCard("Author Archive POE", authorEvidence, "No author archive evidence captured")}
+                ${collectionCard("REST Custom Endpoints", restEndpoints, "No custom endpoints captured")}
+                ${collectionCard("XML-RPC Methods", xmlrpcMethods, "No XML-RPC methods captured")}
+              </div>
+            </section>
+            <table class="module-table">
+              <tbody>
+                ${detailRows.map(([label, value]) => `<tr><th>${escapeHtml(label)}</th><td>${escapeHtml(value)}</td></tr>`).join("")}
+              </tbody>
+            </table>
+          `;
+        }
+
+        function reportHaystack(report) {
+          return JSON.stringify({
+            target: report.target,
+            base_url: report.base_url,
+            plugins: report.plugins,
+            users: report.users,
+            user_vectors: report.user_enumeration?.vectors,
+            author_poe: report.user_enumeration?.evidence,
+            rest: report.rest,
+            xmlrpc: report.xmlrpc,
+            login: report.login,
+            attack_surface: report.attack_surface?.map((item) => ({
+              area: item.area,
+              summary: item.summary,
+              evidence: item.evidence,
+              mitre: item.mitre?.map((entry) => `${entry.id} ${entry.name}`)
+            }))
+          }).toLowerCase();
+        }
+
+        function applyFilter() {
+          const term = filterEl.value.trim().toLowerCase();
+          filteredReports = term
+            ? reports.filter((report) => reportHaystack(report).includes(term))
+            : reports.slice();
+          activeIndex = 0;
+          updateMetrics(filteredReports);
+          renderList();
+        }
+
+        clearEl.addEventListener("click", () => {
+          filterEl.value = "";
+          applyFilter();
+        });
+        filterEl.addEventListener("input", applyFilter);
+
+        updateMetrics(filteredReports);
+        renderList();
+      </script>
       <footer>
         <p>Powered by <a href="https://www.cyberdevelopment.company">Cyber Development</a></p>
       </footer>
@@ -386,13 +862,13 @@ while IFS= read -r raw_target || [[ -n "${raw_target}" ]]; do
     "${SCRIPT_DIR}/plugin_enum.sh" "${base_url}" "${target_dir}"
   else
     : > "${target_dir}/plugins.txt"
-    jq -n '{plugin_count: 0, plugins: []}' > "${target_dir}/plugins.json"
+    jq -n '{plugin_count: 0, plugins: [], sources: [], custom_namespaces: [], plugin_api_status: "not_requested"}' > "${target_dir}/plugins.json"
   fi
 
   if [[ "${RUN_REST}" == "yes" ]]; then
     "${SCRIPT_DIR}/rest_api_scan.sh" "${base_url}" "${target_dir}"
   else
-    jq -n '{custom_endpoints: [], namespaces: [], users_exposed: "no", posts_exposed: "no", drafts_exposed: "no"}' > "${target_dir}/rest_endpoints.json"
+    jq -n '{custom_endpoints: [], namespaces: [], endpoints: {root: "not_requested", users: "not_requested", posts: "not_requested"}, users_exposed: "no", posts_exposed: "no", drafts_exposed: "no"}' > "${target_dir}/rest_endpoints.json"
   fi
 
   if [[ "${RUN_XMLRPC}" == "yes" ]]; then
@@ -406,14 +882,14 @@ while IFS= read -r raw_target || [[ -n "${raw_target}" ]]; do
   if [[ "${RUN_LOGIN}" == "yes" ]]; then
     "${SCRIPT_DIR}/login_scan.sh" "${base_url}" "${target_dir}"
   else
-    jq -n '{login_page_present: "no", invalid_login_response: "no", rate_limiting_signals: "no", wp_admin_endpoint: "no"}' > "${target_dir}/login_surface.json"
+    jq -n '{login_page_present: "no", invalid_login_response: "no", rate_limiting_signals: "no", wp_admin_endpoint: "no", login_paths: []}' > "${target_dir}/login_surface.json"
   fi
 
   if [[ "${RUN_USERS}" == "yes" ]]; then
     "${SCRIPT_DIR}/user_enum.sh" "${base_url}" "${target_dir}"
   else
     : > "${target_dir}/users.txt"
-    jq -n '{user_count: 0, users: []}' > "${target_dir}/users.json"
+    jq -n '{user_count: 0, users: [], vectors: [], evidence: {rest_users: [], author_archives: [], sitemap_authors: [], feed_authors: []}, sources: {rest_api: "not_requested", sitemap: "not_requested", feed: "not_requested"}}' > "${target_dir}/users.json"
   fi
 
   if [[ "${RUN_CEWL}" == "yes" ]]; then

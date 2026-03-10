@@ -26,6 +26,7 @@ LOGIN_PRESENT="no"
 ERROR_RESPONSE="no"
 RATE_LIMITING="no"
 ADMIN_ENDPOINT="no"
+LOGIN_PATHS='[]'
 
 if [[ "${LOGIN_CODE}" == "200" ]] && grep -Eqi 'wp-submit|user_login|wp-login' "${LOGIN_BODY}" 2>/dev/null; then
   LOGIN_PRESENT="yes"
@@ -43,6 +44,14 @@ if grep -Eqi 'retry-after|x-ratelimit|too many|slow down' "${POST_HEADERS}" "${P
   RATE_LIMITING="yes"
 fi
 
+LOGIN_PATHS="$(jq -n \
+  --arg login_present "${LOGIN_PRESENT}" \
+  --arg admin_present "${ADMIN_ENDPOINT}" \
+  '[
+    if $login_present == "yes" then "/wp-login.php" else empty end,
+    if $admin_present == "yes" then "/wp-admin/" else empty end
+  ]')"
+
 jq -n \
   --arg base_url "${BASE_URL}" \
   --arg login_status "${LOGIN_CODE}" \
@@ -51,6 +60,7 @@ jq -n \
   --arg rate_limiting_signals "${RATE_LIMITING}" \
   --arg wp_admin_endpoint "${ADMIN_ENDPOINT}" \
   --arg admin_status "${ADMIN_CODE}" \
+  --argjson login_paths "${LOGIN_PATHS}" \
   '{
     base_url: $base_url,
     login_status: $login_status,
@@ -58,5 +68,6 @@ jq -n \
     invalid_login_response: $invalid_login_response,
     rate_limiting_signals: $rate_limiting_signals,
     wp_admin_endpoint: $wp_admin_endpoint,
-    wp_admin_status: $admin_status
+    wp_admin_status: $admin_status,
+    login_paths: $login_paths
   }' > "${OUTPUT_DIR}/login_surface.json"
